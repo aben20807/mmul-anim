@@ -19,15 +19,24 @@ import cairo as c
 import argparse
 from subprocess import Popen, PIPE
 
-parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--title', type=str, default="")
-parser.add_argument('--L1', metavar='size', type=int, default=0, help='L1 cache size')
-parser.add_argument('--block1', metavar='size', type=int, default=12, help='Inner block size')
-parser.add_argument('--block2', metavar='size', type=int, default=12, help='Outer block size')
-parser.add_argument('--linear', action='store_true', help='Show as linear memory')
-parser.add_argument('--output', '-o', default='matrix_mul.pdf', help='Output PDF file (default: %(default)s)')
-parser.add_argument('--transpose', action='store_true', help='Transpose matrix B')
-parser.add_argument('--pdf', action='store_true', help='Generate PDF')
+parser = argparse.ArgumentParser(description="Process some integers.")
+parser.add_argument("--title", type=str, default="")
+parser.add_argument("--L1", metavar="size", type=int, default=0, help="L1 cache size")
+parser.add_argument(
+    "--block1", metavar="size", type=int, default=12, help="Inner block size"
+)
+parser.add_argument(
+    "--block2", metavar="size", type=int, default=12, help="Outer block size"
+)
+parser.add_argument("--linear", action="store_true", help="Show as linear memory")
+parser.add_argument(
+    "--output",
+    "-o",
+    default="matrix_mul.pdf",
+    help="Output PDF file (default: %(default)s)",
+)
+parser.add_argument("--transpose", action="store_true", help="Transpose matrix B")
+parser.add_argument("--pdf", action="store_true", help="Generate PDF")
 
 args = parser.parse_args()
 
@@ -37,52 +46,67 @@ if args.pdf:
 else:
     pdf = False
     png_scale = 3
-    surface = c.ImageSurface(c.FORMAT_RGB24, 380*png_scale, 200*png_scale)
+    surface = c.ImageSurface(c.FORMAT_RGB24, 380 * png_scale, 200 * png_scale)
 ctx = c.Context(surface)
 
 if not pdf:
     ctx.scale(png_scale, png_scale)
-    ffmpeg = Popen('ffmpeg -y -f png_pipe -r 24 -i - -vcodec h264 -r 24 -f mp4'.split() + [ args.output ], stdin=PIPE)
+    ffmpeg = Popen(
+        "ffmpeg -y -f png_pipe -r 24 -i - -vcodec h264 -r 24 -f mp4".split()
+        + [args.output],
+        stdin=PIPE,
+    )
+
 
 class Save:
     def __init__(self, ctx):
         self.ctx = ctx
+
     def __enter__(self):
         self.ctx.save()
+
     def __exit__(self, exc_type, exc_value, traceback):
         self.ctx.restore()
+
 
 class Translate:
     def __init__(self, ctx, dx, dy):
         self.ctx = ctx
         self.dx = dx
         self.dy = dy
+
     def __enter__(self):
         self.ctx.save()
         self.ctx.translate(self.dx, self.dy)
+
     def __exit__(self, exc_type, exc_value, traceback):
         self.ctx.restore()
+
 
 class Scale:
     def __init__(self, ctx, sx, sy):
         self.ctx = ctx
         self.sx = sx
         self.sy = sy
+
     def __enter__(self):
         self.ctx.save()
         self.ctx.scale(self.sx, self.sy)
+
     def __exit__(self, exc_type, exc_value, traceback):
         self.ctx.restore()
 
+
 ctx.set_operator(c.OPERATOR_SOURCE)
+
 
 class Matrix:
     size = 12
-    L1_size = args.L1 # in cache lines
-    L2_size = 8      # in cache lines
-    cache_line_size = 2 # must be power of 2
+    L1_size = args.L1  # in cache lines
+    L2_size = 8  # in cache lines
+    cache_line_size = 2  # must be power of 2
 
-    def __init__(self, name, transpose = False):
+    def __init__(self, name, transpose=False):
         self.cache = list()
         self.last_access = (None, None)
         self.name = name
@@ -94,19 +118,17 @@ class Matrix:
     def xy2cache(self, x, y):
         return (y * self.size + x) & ~(self.cache_line_size - 1)
 
-
     def cache2xy(self, tag):
         l = list()
         for i in range(self.cache_line_size):
             addr = tag + i
-            x,y = (addr % self.size,
-                   addr // self.size)
+            x, y = (addr % self.size, addr // self.size)
             l.append((x, y))
         return l
 
     def access(self, y, x):
         if self.transpose:
-            x,y = y,x
+            x, y = y, x
         self.accesses += 1
         self.last_access = (x, y)
         tag = self.xy2cache(x, y)
@@ -123,6 +145,7 @@ class Matrix:
         if len(self.cache) > self.L2_size:
             del self.cache[self.L2_size]
 
+
 class MatrixDrawer:
     def __init__(self, matrix):
         self.matrix = matrix
@@ -134,45 +157,54 @@ class MatrixDrawer:
             self.show_name()
             with Save(ctx):
                 if self.matrix.L1_size > 0:
-                    self.show_stat("mem:%-3d L1 hit:%-3d L2 hit:%-3d" %
-                                   (self.matrix.accesses, self.matrix.L1_hits, self.matrix.L2_hits))
+                    self.show_stat(
+                        "mem:%-3d L1 hit:%-3d L2 hit:%-3d"
+                        % (
+                            self.matrix.accesses,
+                            self.matrix.L1_hits,
+                            self.matrix.L2_hits,
+                        )
+                    )
                 else:
-                    self.show_stat("mem:%-3d cache hit:%-3d" %
-                                   (self.matrix.accesses, self.matrix.L2_hits))
+                    self.show_stat(
+                        "mem:%-3d cache hit:%-3d"
+                        % (self.matrix.accesses, self.matrix.L2_hits)
+                    )
             self.draw_cache()
             self.draw_grid()
 
     def draw_cache(self):
         for i in range(len(self.matrix.cache)):
             tag = self.matrix.cache[i]
-            for (x, y) in [self.matrix.cache2xy(tag)[0]]:
+            for x, y in [self.matrix.cache2xy(tag)[0]]:
                 with Save(ctx):
                     self.cache_path(x, y)
                     if i < self.matrix.L1_size:
-                        t = (i*1/self.matrix.L1_size/1.0)
+                        t = i * 1 / self.matrix.L1_size / 1.0
                         ctx.set_source_rgb(t, 1, t)
                     else:
-                        t = (i*1/self.matrix.L2_size/1.5)
+                        t = i * 1 / self.matrix.L2_size / 1.5
                         ctx.set_source_rgb(1, t, t)
                     ctx.fill()
         if self.matrix.last_access != (None, None):
             with Save(ctx):
                 (x, y) = self.matrix.last_access
-#                 self.element_path(x, y)
-#                 ctx.clip()
+                #                 self.element_path(x, y)
+                #                 ctx.clip()
                 self.element_path(x, y)
-                ctx.set_line_width(4/10)
+                ctx.set_line_width(4 / 10)
                 ctx.stroke()
+
 
 class MatrixDrawerRect(MatrixDrawer):
     def show_name(self):
-        ctx.set_font_size(Matrix.size/12)
+        ctx.set_font_size(Matrix.size / 12)
         ctx.move_to(0, -0.3)
-        ctx.show_text(self.matrix.name+"  ")
+        ctx.show_text(self.matrix.name + "  ")
 
     @staticmethod
     def show_stat(stat):
-        ctx.set_font_size(Matrix.size/20)
+        ctx.set_font_size(Matrix.size / 20)
         ctx.show_text(stat)
 
     def draw_grid(self):
@@ -193,29 +225,30 @@ class MatrixDrawerRect(MatrixDrawer):
         ctx.stroke()
 
     def set_scale(self):
-        ctx.scale(1/self.matrix.size, 1/self.matrix.size)
-        ctx.set_line_width(1/10)
+        ctx.scale(1 / self.matrix.size, 1 / self.matrix.size)
+        ctx.set_line_width(1 / 10)
 
     @staticmethod
     def element_path(x, y):
         ctx.move_to(x, y)
-        ctx.line_to(x+1, y+0)
-        ctx.line_to(x+1, y+1)
-        ctx.line_to(x+0, y+1)
+        ctx.line_to(x + 1, y + 0)
+        ctx.line_to(x + 1, y + 1)
+        ctx.line_to(x + 0, y + 1)
         ctx.close_path()
 
     def cache_path(self, x, y):
         ctx.move_to(x, y)
-        ctx.line_to(x+self.matrix.cache_line_size, y+0)
-        ctx.line_to(x+self.matrix.cache_line_size, y+1)
-        ctx.line_to(x+0, y+1)
+        ctx.line_to(x + self.matrix.cache_line_size, y + 0)
+        ctx.line_to(x + self.matrix.cache_line_size, y + 1)
+        ctx.line_to(x + 0, y + 1)
         ctx.close_path()
+
 
 class MatrixDrawerLine(MatrixDrawer):
     def show_name(self):
         ctx.set_font_size(1.5)
         ctx.move_to(-1.5, 1)
-        ctx.show_text(self.matrix.name+"  ")
+        ctx.show_text(self.matrix.name + "  ")
 
     @staticmethod
     def show_stat(stat):
@@ -223,10 +256,10 @@ class MatrixDrawerLine(MatrixDrawer):
 
     def draw_grid(self):
         s = self.matrix.size * self.matrix.size
-#         for i in range(s):
-#             ctx.move_to(i, 0)
-#             ctx.line_to(i, 1)
-#             ctx.stroke()
+        #         for i in range(s):
+        #             ctx.move_to(i, 0)
+        #             ctx.line_to(i, 1)
+        #             ctx.stroke()
 
         ctx.move_to(0, 0)
         ctx.line_to(s, 0)
@@ -236,26 +269,31 @@ class MatrixDrawerLine(MatrixDrawer):
         ctx.stroke()
 
     def set_scale(self):
-        ctx.scale(2/self.matrix.size/self.matrix.size, 2/self.matrix.size/self.matrix.size)
-        ctx.set_line_width(1/10)
+        ctx.scale(
+            2 / self.matrix.size / self.matrix.size,
+            2 / self.matrix.size / self.matrix.size,
+        )
+        ctx.set_line_width(1 / 10)
 
     def element_path(self, x, y):
-        ctx.move_to(y*self.matrix.size+x, 0)
+        ctx.move_to(y * self.matrix.size + x, 0)
         ctx.rel_line_to(1, 0)
         ctx.rel_line_to(0, 1)
         ctx.rel_line_to(-1, 0)
         ctx.close_path()
 
     def cache_path(self, x, y):
-        ctx.move_to(y*self.matrix.size+x, 0)
+        ctx.move_to(y * self.matrix.size + x, 0)
         ctx.rel_line_to(Matrix.cache_line_size, 0)
         ctx.rel_line_to(0, 1)
         ctx.rel_line_to(-Matrix.cache_line_size, 0)
         ctx.close_path()
 
-a = Matrix('A')
-b = Matrix('B', args.transpose)
-c = Matrix('C')
+
+a = Matrix("A")
+b = Matrix("B", args.transpose)
+c = Matrix("C")
+
 
 class Stats:
     def __init__(self, a, b, c):
@@ -265,25 +303,28 @@ class Stats:
         self.mem = ac
         self.L1h = L1
         self.L2h = L2
-        self.L1p = 100*L1//ac
-        self.L2p = 100*L2//ac
+        self.L1p = 100 * L1 // ac
+        self.L2p = 100 * L2 // ac
         self.cache = L1 + L2
-        self.cachep = 100*self.cache//ac
+        self.cachep = 100 * self.cache // ac
 
     def __str__(self):
-        return "mem:%(mem)-4d   L1 hits:%(L1h)-4d≅%(L1p)2d%%   L2 hits:%(L2h)-4d≅%(L2p)2d%%   cache hits:%(cache)-4d≅%(cachep)2d%%" % self.__dict__
+        return (
+            "mem:%(mem)-4d   L1 hits:%(L1h)-4d≅%(L1p)2d%%   L2 hits:%(L2h)-4d≅%(L2p)2d%%   cache hits:%(cache)-4d≅%(cachep)2d%%"
+            % self.__dict__
+        )
 
 
 def draw_matrices():
     with Save(ctx):
-        ctx.set_source_rgb (0, 0, 0)
+        ctx.set_source_rgb(0, 0, 0)
         dist = 1.2
         ctx.translate(20, 25)
         ctx.set_font_size(10)
         ctx.show_text("Matrix multiplication: " + args.title)
         ctx.translate(0, 20)
         ctx.scale(100, 100)
-        ctx.set_font_size(1/12)
+        ctx.set_font_size(1 / 12)
         with Save(ctx):
             MatrixDrawerRect(a)
         with Translate(ctx, 1.05, 0.5):
@@ -292,27 +333,35 @@ def draw_matrices():
             MatrixDrawerRect(b)
         with Translate(ctx, 2.25, 0.5):
             ctx.show_text("=")
-        with Translate(ctx, 2*dist, 0):
+        with Translate(ctx, 2 * dist, 0):
             MatrixDrawerRect(c)
         with Translate(ctx, 0.0, 1.15):
             stat = Stats(a, b, c)
             if args.L1 > 0:
-                ctx.show_text("Totals: mem:%(mem)-4d    L1 hits:%(L1h)-4d≅%(L1p)2d%%    L2 hits:%(L2h)-4d≅%(L2p)2d%%    cache hits:%(cache)-4d≅%(cachep)2d%%" % stat.__dict__)
+                ctx.show_text(
+                    "Totals: mem:%(mem)-4d    L1 hits:%(L1h)-4d≅%(L1p)2d%%    L2 hits:%(L2h)-4d≅%(L2p)2d%%    cache hits:%(cache)-4d≅%(cachep)2d%%"
+                    % stat.__dict__
+                )
             else:
-                ctx.show_text("Totals: mem:%(mem)-4d    cache hits:%(cache)-4d≅%(cachep)2d%%" % stat.__dict__)
+                ctx.show_text(
+                    "Totals: mem:%(mem)-4d    cache hits:%(cache)-4d≅%(cachep)2d%%"
+                    % stat.__dict__
+                )
+
 
 def draw_memory():
     with Save(ctx):
-        ctx.set_source_rgb (0, 0, 0)
-        dist = 5/Matrix.size/Matrix.size
+        ctx.set_source_rgb(0, 0, 0)
+        dist = 5 / Matrix.size / Matrix.size
         ctx.translate(20, 175)
         ctx.scale(170, 170)
         with Translate(ctx, 0, 0):
             MatrixDrawerLine(a)
         with Translate(ctx, 0, dist):
             MatrixDrawerLine(b)
-        with Translate(ctx, 0, 2*dist):
+        with Translate(ctx, 0, 2 * dist):
             MatrixDrawerLine(c)
+
 
 cnt = 0
 block2_size = args.block2
@@ -320,17 +369,17 @@ block1_size = args.block1
 for i2 in range(0, Matrix.size, block2_size):
     for j2 in range(0, Matrix.size, block2_size):
         for k2 in range(0, Matrix.size, block2_size):
-            for i1 in range(i2, i2+block2_size, block1_size):
-                for j1 in range(j2, j2+block2_size, block1_size):
-                    for k1 in range(k2, k2+block2_size, block1_size):
-                        for i in range(i1, i1+block1_size):
-                            for j in range(j1, j1+block1_size):
-                                for k in range(k1, k1+block1_size):
+            for i1 in range(i2, i2 + block2_size, block1_size):
+                for j1 in range(j2, j2 + block2_size, block1_size):
+                    for k1 in range(k2, k2 + block2_size, block1_size):
+                        for i in range(i1, i1 + block1_size):
+                            for j in range(j1, j1 + block1_size):
+                                for k in range(k1, k1 + block1_size):
                                     c.access(i, j)
                                     a.access(i, k)
                                     b.access(k, j)
 
-                                    #if cnt < 100:
+                                    # if cnt < 100:
                                     if True:
                                         if not pdf:
                                             ctx.set_source_rgb(1, 1, 1)
