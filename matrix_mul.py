@@ -21,9 +21,9 @@
 # * add main function and avoid global variables
 # * more configurable arguments
 # * no visualization mode, calculate the hit rate only
+# * SIMD
 # * gif mode (TODO)
 # * boundary check (TODO)
-# * SIMD (TODO)
 
 import cairo
 import argparse
@@ -132,6 +132,7 @@ def config(args):
 
     if not args.viz:
         return bigctx
+
     check_output_extension(args.output, args.type)
     if args.type == FileOutputType.pdf:
         try:
@@ -145,18 +146,16 @@ def config(args):
             cairo.FORMAT_RGB24, 380 * png_scale, 200 * png_scale
         )
     bigctx["ctx"] = cairo.Context(surface)
+    bigctx["ctx"].set_operator(cairo.OPERATOR_SOURCE)
+    bigctx["surface"] = surface
 
-    ffmpeg = None
     if args.type != FileOutputType.pdf:
         bigctx["ctx"].scale(png_scale, png_scale)
-        ffmpeg = Popen(
+        bigctx["ffmpeg"] = Popen(
             "ffmpeg -y -f png_pipe -r 30 -i - -vcodec h264 -r 30 -f mp4".split()
             + [args.output],
             stdin=PIPE,
         )
-    bigctx["ctx"].set_operator(cairo.OPERATOR_SOURCE)
-    bigctx["surface"] = surface
-    bigctx["ffmpeg"] = ffmpeg
     return bigctx
 
 
@@ -207,7 +206,7 @@ class Matrix:
 
     def __init__(self, name, transpose=False):
         self.cache = list()
-        self.last_access = (None, None)
+        self.last_access_list = list()
         self.name = name
         self.transpose = transpose
         self.accesses = 0
@@ -215,11 +214,11 @@ class Matrix:
         self.L2_hits = 0
 
     @classmethod
-    def static_init(cls, args):
-        cls.size = args.matrix_size
-        cls.L1_size = args.L1
-        cls.L2_size = args.L2
-        cls.cache_line_size = args.cache_line
+    def static_init(cls, matrix_size, L1, L2, cache_line):
+        cls.size = matrix_size
+        cls.L1_size = L1
+        cls.L2_size = L2
+        cls.cache_line_size = cache_line
 
     def xy2cache(self, x, y):
         return (y * self.size + x) & ~(self.cache_line_size - 1)
@@ -236,7 +235,7 @@ class Matrix:
         if self.transpose:
             x, y = y, x
         self.accesses += 1
-        self.last_access = (x, y)
+        self.last_access_list.append((x, y))
         tag = self.xy2cache(x, y)
         try:
             i = self.cache.index(tag)
@@ -290,8 +289,15 @@ class MatrixDrawer(ABC):
     def draw_grid():
         raise NotImplementedError
 
+    @abstractmethod
+    def cache_path():
+        raise NotImplementedError
+
+    @abstractmethod
+    def element_path():
+        raise NotImplementedError
+
     def draw_cache(self):
-        # SIMD (TODO)
         ctx = self.ctx
         for i in range(len(self.matrix.cache)):
             tag = self.matrix.cache[i]
@@ -305,12 +311,13 @@ class MatrixDrawer(ABC):
                         t = i * 1 / self.matrix.L2_size / 1.5
                         ctx.set_source_rgb(1, t, t)
                     ctx.fill()
-        if self.matrix.last_access != (None, None):
-            with Save(ctx):
-                (x, y) = self.matrix.last_access
+
+        with Save(ctx):
+            for x, y in self.matrix.last_access_list:
                 self.element_path(x, y)
                 ctx.set_line_width(4 / 10)
                 ctx.stroke()
+            self.matrix.last_access_list.clear()
 
 
 class MatrixDrawerRect(MatrixDrawer):
@@ -349,6 +356,7 @@ class MatrixDrawerRect(MatrixDrawer):
         ctx.scale(1 / self.matrix.size, 1 / self.matrix.size)
         ctx.set_line_width(1 / 10)
 
+    @override
     def element_path(self, x, y):
         ctx = self.ctx
         ctx.move_to(x, y)
@@ -357,6 +365,7 @@ class MatrixDrawerRect(MatrixDrawer):
         ctx.line_to(x + 0, y + 1)
         ctx.close_path()
 
+    @override
     def cache_path(self, x, y):
         ctx = self.ctx
         ctx.move_to(x, y)
@@ -396,6 +405,7 @@ class MatrixDrawerLine(MatrixDrawer):
         )
         ctx.set_line_width(1 / 10)
 
+    @override
     def element_path(self, x, y):
         ctx = self.ctx
         ctx.move_to(y * self.matrix.size + x, 0)
@@ -404,6 +414,7 @@ class MatrixDrawerLine(MatrixDrawer):
         ctx.rel_line_to(-1, 0)
         ctx.close_path()
 
+    @override
     def cache_path(self, x, y):
         ctx = self.ctx
         ctx.move_to(y * self.matrix.size + x, 0)
@@ -573,7 +584,7 @@ def perform_matrix_multiply_v0(bigctx, a: Matrix, b: Matrix, c: Matrix):
     drawer = FrameDrawer(
         bigctx,
         title=sys._getframe().f_code.co_name,
-        subtitle="",
+        subtitle="ijk",
     )
     frame_cnt = 0
     for i in range(0, Matrix.size):
@@ -591,25 +602,7 @@ def perform_matrix_multiply_v1(bigctx, a: Matrix, b: Matrix, c: Matrix):
     drawer = FrameDrawer(
         bigctx,
         title=sys._getframe().f_code.co_name,
-        subtitle="",
-    )
-    frame_cnt = 0
-    for i in range(0, Matrix.size):
-        for k in range(0, Matrix.size):
-            for j in range(0, Matrix.size):
-                c.access(i, j)
-                a.access(i, k)
-                b.access(k, j)
-
-                drawer.draw_frame(a, b, c, frame_cnt)
-                frame_cnt += 1
-
-
-def perform_matrix_multiply_v1(bigctx, a: Matrix, b: Matrix, c: Matrix):
-    drawer = FrameDrawer(
-        bigctx,
-        title=sys._getframe().f_code.co_name,
-        subtitle="",
+        subtitle="ikj",
     )
     frame_cnt = 0
     for i in range(0, Matrix.size):
@@ -645,22 +638,47 @@ def perform_matrix_multiply_v2(bigctx, a: Matrix, b: Matrix, c: Matrix):
                         frame_cnt += 1
 
 
+def perform_matrix_multiply_v3(bigctx, a: Matrix, b: Matrix, c: Matrix):
+    block1_size = 16
+    block2_size = 4
+    drawer = FrameDrawer(
+        bigctx,
+        title=sys._getframe().f_code.co_name,
+        subtitle=", "
+        + f"blocking: (inner {block1_size}, outer {block2_size}), w/ SIMD",
+    )
+    frame_cnt = 0
+    for i in range(0, Matrix.size, block1_size):
+        for j in range(0, Matrix.size, block2_size):
+            for ii in range(i, i + block1_size):
+                for jj in range(j, j + block2_size):
+                    for k in range(0, Matrix.size, 4):
+                        for simd_i in range(4):
+                            c.access(ii, jj)
+                            a.access(ii, k + simd_i)
+                            b.access(k + simd_i, jj)
+
+                        drawer.draw_frame(a, b, c, frame_cnt)
+                        frame_cnt += 1
+
+
 def main():
     args = get_args()
     bigctx = config(args)
 
-    Matrix.static_init(args)
+    Matrix.static_init(args.matrix_size, args.L1, args.L2, args.cache_line)
     a = Matrix("A")
     b = Matrix("B", args.transpose)
     c = Matrix("C")
 
     MatrixDrawer.static_init(bigctx["ctx"])
-    perform_matrix_multiply(bigctx, a, b, c)
+    # perform_matrix_multiply(bigctx, a, b, c)
     # perform_matrix_multiply_v0(bigctx, a, b, c)
     # perform_matrix_multiply_v1(bigctx, a, b, c)
     # perform_matrix_multiply_v2(bigctx, a, b, c)
+    perform_matrix_multiply_v3(bigctx, a, b, c)
 
-    print(Stats(a, b, c, args.L1 > 0))
+    print(Stats(a, b, c, hasL1=args.L1 > 0))
     if bigctx["ffmpeg"] is not None:
         bigctx["ffmpeg"].stdin.close()
         bigctx["ffmpeg"].wait()
