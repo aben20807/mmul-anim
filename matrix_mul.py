@@ -22,6 +22,7 @@
 # * more configurable arguments
 # * no visualization mode, calculate the hit rate only
 # * SIMD
+# * ffmpeg configurations for faster execution
 # * gif mode (TODO)
 # * boundary check (TODO)
 
@@ -111,6 +112,7 @@ def get_args():
         default=FileOutputType.pdf,
         help="The type of the output file",
     )
+    parser.add_argument("--framerate", type=int, default=24, help="mp4 framerate")
     return parser.parse_args()
 
 
@@ -152,8 +154,10 @@ def config(args):
     if args.type != FileOutputType.pdf:
         bigctx["ctx"].scale(png_scale, png_scale)
         bigctx["ffmpeg"] = Popen(
-            "ffmpeg -y -f png_pipe -r 30 -i - -vcodec h264 -r 30 -f mp4".split()
-            + [args.output],
+            (
+                "ffmpeg -y -f png_pipe -i - -vcodec h264 -crf 28 -preset veryfast "
+                + f"-pix_fmt yuv420p -r {args.framerate} -f mp4 {args.output}"
+            ).split(),
             stdin=PIPE,
         )
     return bigctx
