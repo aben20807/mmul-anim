@@ -36,6 +36,7 @@ from abc import ABC, abstractmethod
 
 
 class FileOutputType(Enum):
+    dry = "dry"  # dry run and calculate the hit rate only
     pdf = "pdf"
     mp4 = "mp4"
 
@@ -91,7 +92,6 @@ def get_args():
     )
 
     # Visualization
-    parser.add_argument("--viz", action="store_true", help="To generate pdf or mp4")
     parser.add_argument("--no-memory", action="store_true", help="Do not draw memory")
 
     # Output settings
@@ -109,7 +109,7 @@ def get_args():
         "-t",
         type=FileOutputType,
         choices=list(FileOutputType),
-        default=FileOutputType.pdf,
+        default=FileOutputType.dry,
         help="The type of the output file",
     )
     parser.add_argument("--framerate", type=int, default=24, help="mp4 framerate")
@@ -132,7 +132,7 @@ def config(args):
     bigctx["ffmpeg"] = None
     bigctx["args"] = args
 
-    if not args.viz:
+    if args.type == FileOutputType.dry:
         return bigctx
 
     check_output_extension(args.output, args.type)
@@ -528,7 +528,7 @@ class FrameDrawer:
 
     def draw_frame(self, a, b, c, frame_cnt):
         args = self.args
-        if not args.viz:
+        if args.type == FileOutputType.dry:
             return
         ctx = self.ctx
         ffmpeg = self.ffmpeg
