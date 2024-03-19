@@ -23,7 +23,6 @@
 # * no visualization mode, calculate the hit rate only
 # * SIMD
 # * ffmpeg configurations for faster execution
-# * gif mode (TODO)
 # * boundary check (TODO)
 
 import cairo
@@ -117,6 +116,7 @@ def get_args():
 
 
 def check_output_extension(output: str, type: FileOutputType):
+    # TODO the check is not perfect
     if type == FileOutputType.pdf and output.lower().endswith("pdf"):
         return
     if type != FileOutputType.pdf and not output.lower().endswith("pdf"):
@@ -132,6 +132,7 @@ def config(args):
     bigctx["ffmpeg"] = None
     bigctx["args"] = args
 
+    # just return because of dry run, we only need the args in the bigctx
     if args.type == FileOutputType.dry:
         return bigctx
 
@@ -150,9 +151,12 @@ def config(args):
     bigctx["ctx"] = cairo.Context(surface)
     bigctx["ctx"].set_operator(cairo.OPERATOR_SOURCE)
     bigctx["surface"] = surface
+    if args.type == FileOutputType.pdf:
+        return bigctx
 
-    if args.type != FileOutputType.pdf:
-        bigctx["ctx"].scale(png_scale, png_scale)
+    # not pdf, so we open the ffmpeg
+    bigctx["ctx"].scale(png_scale, png_scale)
+    if args.type == FileOutputType.mp4:
         bigctx["ffmpeg"] = Popen(
             (
                 "ffmpeg -y -f png_pipe -i - -vcodec h264 -crf 28 -preset veryfast "
