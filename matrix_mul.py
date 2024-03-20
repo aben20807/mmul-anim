@@ -45,14 +45,14 @@ class FileOutputType(Enum):
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description="Process some integers.",
+        description="Visualization of cache-optimized matrix multiplication",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     # Matrix settings
     parser.add_argument(
         "--matrix-size",
-        metavar="size",
+        metavar="SIZE",
         type=int,
         default=16,
         help="n of the n-by-n matrix",
@@ -61,33 +61,33 @@ def get_args():
 
     # Cache settings
     parser.add_argument(
+        "--cache-line",
+        metavar="SIZE",
+        type=int,
+        default=4,
+        help="number of elements for each cache line, must be power of 2",
+    )
+    parser.add_argument(
         "--L1",
-        metavar="size",
+        metavar="SIZE",
         type=int,
         default=4,
         help="number of cache lines in L1 cache",
     )
     parser.add_argument(
         "--L2",
-        metavar="size",
+        metavar="SIZE",
         type=int,
         default=16,
         help="number of cache lines in L2 cache",
     )
-    parser.add_argument(
-        "--cache-line",
-        metavar="size",
-        type=int,
-        default=4,
-        help="number of elements for each cache line, must be power of 2",
-    )
 
     # Blocking
     parser.add_argument(
-        "--block1", metavar="size", type=int, default=16, help="Inner block size"
+        "--block1", metavar="SIZE", type=int, default=16, help="Inner block size"
     )
     parser.add_argument(
-        "--block2", metavar="size", type=int, default=4, help="Outer block size"
+        "--block2", metavar="SIZE", type=int, default=4, help="Outer block size"
     )
 
     # Visualization
@@ -99,9 +99,10 @@ def get_args():
     parser.add_argument(
         "--output",
         "-o",
+        metavar="FILENAME",
         type=str,
         default="matrix_mul.pdf",
-        help="Output PDF file",
+        help="Output file",
     )
     parser.add_argument(
         "--type",
