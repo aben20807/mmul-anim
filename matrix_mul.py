@@ -32,6 +32,7 @@ import sys
 from enum import Enum
 from typing import override
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 class FileOutputType(Enum):
@@ -46,7 +47,9 @@ class FileOutputType(Enum):
 def get_args():
     parser = argparse.ArgumentParser(
         description="Visualization of cache-optimized matrix multiplication",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(
+            prog, width=100
+        ),
     )
 
     # Matrix settings
@@ -99,10 +102,10 @@ def get_args():
     parser.add_argument(
         "--output",
         "-o",
-        metavar="FILENAME",
+        metavar="PATH",
         type=str,
         default="matrix_mul.pdf",
-        help="Output file",
+        help="Output file path",
     )
     parser.add_argument(
         "--type",
@@ -112,18 +115,14 @@ def get_args():
         default=FileOutputType.dry,
         help="The type of the output file",
     )
+    parser.add_argument(
+        "--no-auto-correct-extension",
+        action="store_true",
+        help="Do not correct the extension automatically",
+    )
+
     parser.add_argument("--framerate", type=int, default=24, help="mp4 framerate")
     return parser.parse_args()
-
-
-def check_output_extension(output: str, type: FileOutputType):
-    # TODO the check is not perfect
-    if type == FileOutputType.pdf and output.lower().endswith("pdf"):
-        return
-    if type != FileOutputType.pdf and not output.lower().endswith("pdf"):
-        return
-    print("Output extension mismatch")
-    sys.exit(1)
 
 
 def config(args):
@@ -137,10 +136,13 @@ def config(args):
     if args.type == FileOutputType.dry:
         return bigctx
 
-    check_output_extension(args.output, args.type)
+    output_path = Path(args.output)
+    if not args.no_auto_correct_extension:
+        output_path = output_path.with_suffix(f".{args.type}")
+
     if args.type == FileOutputType.pdf:
         try:
-            surface = cairo.PDFSurface(args.output, 380, 200)
+            surface = cairo.PDFSurface(output_path, 380, 200)
         except Exception as e:
             print(f"Error: '{e}', you may need to close the pdf from your viewer.")
             sys.exit(1)
@@ -161,7 +163,7 @@ def config(args):
         bigctx["ffmpeg"] = Popen(
             (
                 "ffmpeg -y -f png_pipe -i - -vcodec h264 -crf 28 -preset veryfast "
-                + f"-pix_fmt yuv420p -r {args.framerate} -f mp4 {args.output}"
+                + f"-pix_fmt yuv420p -r {args.framerate} -f mp4 {output_path}"
             ).split(),
             stdin=PIPE,
         )

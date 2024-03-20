@@ -24,10 +24,10 @@ How to run the modified version:
 
 ```bash
 $ python matrix_mul.py --help
-usage: matrix_mul.py [-h] [--matrix-size SIZE] [--transpose] [--cache-line SIZE]
-                     [--L1 SIZE] [--L2 SIZE] [--block1 SIZE] [--block2 SIZE] [--no-memory]
-                     [--title TITLE] [--subtitle SUBTITLE] [--output FILENAME]
-                     [--type {dry,pdf,mp4}] [--framerate FRAMERATE]
+usage: matrix_mul.py [-h] [--matrix-size SIZE] [--transpose] [--cache-line SIZE] [--L1 SIZE]
+                     [--L2 SIZE] [--block1 SIZE] [--block2 SIZE] [--no-memory] [--title TITLE]
+                     [--subtitle SUBTITLE] [--output PATH] [--type {dry,pdf,mp4}]
+                     [--no-auto-correct-extension] [--framerate FRAMERATE]
 
 Visualization of cache-optimized matrix multiplication
 
@@ -43,10 +43,12 @@ options:
   --no-memory           Do not draw memory (default: False)
   --title TITLE
   --subtitle SUBTITLE
-  --output FILENAME, -o FILENAME
-                        Output file (default: matrix_mul.pdf)
+  --output PATH, -o PATH
+                        Output file path (default: matrix_mul.pdf)
   --type {dry,pdf,mp4}, -t {dry,pdf,mp4}
                         The type of the output file (default: dry)
+  --no-auto-correct-extension
+                        Do not correct the extension automatically (default: False)
   --framerate FRAMERATE
                         mp4 framerate (default: 24)
 ```
