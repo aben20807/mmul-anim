@@ -26,7 +26,7 @@ How to run the modified version:
 $ python matrix_mul.py --help
 usage: matrix_mul.py [-h] [--matrix-size SIZE] [--transpose] [--cache-line SIZE] [--L1 SIZE]
                      [--L2 SIZE] [--block1 SIZE] [--block2 SIZE] [--no-memory] [--title TITLE]
-                     [--subtitle SUBTITLE] [--output PATH] [--type {dry,pdf,mp4}]
+                     [--subtitle SUBTITLE] [--output PATH] [--type {dry,pdf,mp4}] [--max-frame NUM]
                      [--no-auto-correct-extension] [--framerate FRAMERATE]
 
 Visualization of cache-optimized matrix multiplication
@@ -47,6 +47,7 @@ options:
                         Output file path (default: matrix_mul.pdf)
   --type {dry,pdf,mp4}, -t {dry,pdf,mp4}
                         The type of the output file (default: dry)
+  --max-frame NUM       The max number of frames to be generated (default: None)
   --no-auto-correct-extension
                         Do not correct the extension automatically (default: False)
   --framerate FRAMERATE

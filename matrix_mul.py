@@ -116,6 +116,13 @@ def get_args():
         help="The type of the output file",
     )
     parser.add_argument(
+        "--max-frame",
+        metavar="NUM",
+        type=int,
+        default=None,
+        help="The max number of frames to be generated",
+    )
+    parser.add_argument(
         "--no-auto-correct-extension",
         action="store_true",
         help="Do not correct the extension automatically",
@@ -540,31 +547,33 @@ class FrameDrawer:
             with Translate(ctx, 0, 2 * dist):
                 MatrixDrawerLine(c)
 
-    def draw_frame(self, a, b, c, frame_cnt):
+    def draw_frame(self, a: Matrix, b: Matrix, c: Matrix, frame_cnt: int):
         args = self.args
         if args.type == FileOutputType.dry:
+            return
+        if args.max_frame is not None and frame_cnt >= args.max_frame:
             return
         ctx = self.ctx
         ffmpeg = self.ffmpeg
         surface = self.surface
-        if True:
-            if args.type != FileOutputType.pdf:
-                ctx.set_source_rgb(1, 1, 1)
-                ctx.paint()
 
-            self._draw_matrices(a, b, c)
-            if not args.no_memory:
-                self._draw_memory(a, b, c)
-            with Save(ctx):
-                ctx.translate(362, 192)
-                ctx.set_font_size(4)
-                ctx.show_text(f"{frame_cnt+1:6d}")
-            ctx.stroke()
+        if args.type != FileOutputType.pdf:
+            ctx.set_source_rgb(1, 1, 1)
+            ctx.paint()
 
-            if args.type != FileOutputType.pdf:
-                surface.write_to_png(ffmpeg.stdin)
-            else:
-                surface.show_page()
+        self._draw_matrices(a, b, c)
+        if not args.no_memory:
+            self._draw_memory(a, b, c)
+        with Save(ctx):
+            ctx.translate(362, 192)
+            ctx.set_font_size(4)
+            ctx.show_text(f"{frame_cnt+1:6d}")
+        ctx.stroke()
+
+        if args.type != FileOutputType.pdf:
+            surface.write_to_png(ffmpeg.stdin)
+        else:
+            surface.show_page()
 
 
 def perform_matrix_multiply(bigctx, a: Matrix, b: Matrix, c: Matrix):
