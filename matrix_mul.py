@@ -85,12 +85,24 @@ def get_args():
         help="number of cache lines in L2 cache",
     )
 
-    # Blocking
+    # Computation settings
+    parser.add_argument(
+        "--func",
+        type=str,
+        default="vc",
+        choices=[""]
+        + [
+            func.partition("perform_matrix_multiply_")[2]
+            for func in globals().keys()
+            if func.startswith("perform_matrix_multiply_")
+        ],
+        help="Computing function",
+    )
     parser.add_argument(
         "--block1", metavar="SIZE", type=int, default=16, help="Inner block size"
     )
     parser.add_argument(
-        "--block2", metavar="SIZE", type=int, default=4, help="Outer block size"
+        "--block2", metavar="SIZE", type=int, default=8, help="Outer block size"
     )
 
     # Visualization
@@ -565,6 +577,7 @@ class FrameDrawer:
             ctx.set_source_rgb(1, 1, 1)
             ctx.paint()
 
+        # It is recommended to use "perform_matrix_multiply_vc" as an alternative.
         self._draw_matrices(a, b, c)
         if not args.no_memory:
             self._draw_memory(a, b, c)
@@ -581,6 +594,10 @@ class FrameDrawer:
 
 
 def perform_matrix_multiply(bigctx, a: Matrix, b: Matrix, c: Matrix):
+    # Michal Sojka's original implementation has a bug in the block settings,
+    # causing out-of-bound errors for a 16x16 matrix.
+    # Unsafe settings include (4,2), (8,2), (8,4), (16,2), (16,4), and (16,8),
+    # while safe settings are (2,2), (2,4), (2,8), (2,16), (4,4), (4,8), (4,16), (8,8), and (16,16).
     args = bigctx["args"]
 
     drawer = FrameDrawer(
@@ -606,9 +623,34 @@ def perform_matrix_multiply(bigctx, a: Matrix, b: Matrix, c: Matrix):
                                         a.access(i, k)
                                         b.access(k, j)
 
-                                        # if frame_cnt < 100:
                                         drawer.draw_frame(a, b, c, frame_cnt)
                                         frame_cnt += 1
+
+
+def perform_matrix_multiply_vc(bigctx, a: Matrix, b: Matrix, c: Matrix):
+    args = bigctx["args"]
+    block1_size = args.block1
+    block2_size = args.block2
+    drawer = FrameDrawer(
+        bigctx,
+        title=sys._getframe().f_code.co_name,
+        subtitle=", "
+        + f"blocking: (inner {block1_size}, outer {block2_size}), "
+        + f"B {'w/' if args.transpose else 'w/o'} transpose",
+    )
+
+    frame_cnt = 0
+    for i in range(0, Matrix.size, block1_size):
+        for j in range(0, Matrix.size, block2_size):
+            for ii in range(i, i + block1_size):
+                for jj in range(j, j + block2_size):
+                    for k in range(0, Matrix.size):
+                        c.access(ii, jj)
+                        a.access(ii, k)
+                        b.access(k, jj)
+
+                        drawer.draw_frame(a, b, c, frame_cnt)
+                        frame_cnt += 1
 
 
 def perform_matrix_multiply_v0(bigctx, a: Matrix, b: Matrix, c: Matrix):
@@ -731,12 +773,9 @@ def main():
     c = Matrix("C")
 
     MatrixDrawer.static_init(bigctx["ctx"])
-    # perform_matrix_multiply(bigctx, a, b, c)
-    # perform_matrix_multiply_v0(bigctx, a, b, c)
-    # perform_matrix_multiply_v1(bigctx, a, b, c)
-    # perform_matrix_multiply_v2(bigctx, a, b, c)
-    perform_matrix_multiply_v3(bigctx, a, b, c)
-    # perform_matrix_multiply_v3_5(bigctx, a, b, c)
+    globals()[f"perform_matrix_multiply{'_' if args.func != '' else ''}{args.func}"](
+        bigctx, a, b, c
+    )
 
     print(Stats(a, b, c, hasL1=args.L1 > 0))
     if bigctx["ffmpeg"] is not None:
