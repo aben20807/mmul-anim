@@ -23,7 +23,7 @@
 # * no visualization mode, calculate the hit rate only
 # * SIMD
 # * ffmpeg configurations for faster execution
-# * boundary check (TODO)
+# * boundary check: raise IndexError
 
 import cairo
 import argparse
@@ -264,6 +264,10 @@ class Matrix:
             del self.cache[self.L2_size]
 
     def access(self, row: int, col: int):
+        if row >= self.size or col >= self.size:  # boundary check
+            raise IndexError(
+                f"Access out of bound: {(row, col)} is out of {self.size}x{self.size} matrix {self.name}"
+            )
         if self.transpose:
             col, row = row, col
         self.accesses += 1
