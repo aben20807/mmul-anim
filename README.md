@@ -25,9 +25,10 @@ How to run the modified version:
 ```bash
 $ python matrix_mul.py --help
 usage: matrix_mul.py [-h] [--matrix-size SIZE] [--transpose] [--cache-line SIZE] [--L1 SIZE]
-                     [--L2 SIZE] [--block1 SIZE] [--block2 SIZE] [--no-memory] [--title TITLE]
-                     [--subtitle SUBTITLE] [--output PATH] [--type {dry,pdf,mp4}] [--max-frame NUM]
-                     [--no-auto-correct-extension] [--framerate FRAMERATE]
+                     [--L2 SIZE] [--func {,vc,v0,v1,v2,v3,v3_5}] [--block1 SIZE] [--block2 SIZE]
+                     [--no-memory] [--title TITLE] [--subtitle SUBTITLE] [--output PATH]
+                     [--type {dry,pdf,mp4}] [--max-frame NUM] [--no-auto-correct-extension]
+                     [--framerate FRAMERATE]
 
 Visualization of cache-optimized matrix multiplication
 
@@ -38,8 +39,10 @@ options:
   --cache-line SIZE     number of elements for each cache line, must be power of 2 (default: 4)
   --L1 SIZE             number of cache lines in L1 cache (default: 4)
   --L2 SIZE             number of cache lines in L2 cache (default: 16)
+  --func {,vc,v0,v1,v2,v3,v3_5}
+                        Computing function (default: vc)
   --block1 SIZE         Inner block size (default: 16)
-  --block2 SIZE         Outer block size (default: 4)
+  --block2 SIZE         Outer block size (default: 8)
   --no-memory           Do not draw memory (default: False)
   --title TITLE
   --subtitle SUBTITLE
