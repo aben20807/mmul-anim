@@ -231,10 +231,10 @@ class Matrix:
         cls.L2_size = L2
         cls.cache_line_size = cache_line
 
-    def xy2cache(self, x, y):
+    def xy2cache(self, x: int, y: int) -> int:
         return (y * self.size + x) & ~(self.cache_line_size - 1)
 
-    def cache2xy(self, tag):
+    def cache2xy(self, tag: int) -> list:
         l = list()
         for i in range(self.cache_line_size):
             addr = tag + i
@@ -242,12 +242,7 @@ class Matrix:
             l.append((x, y))
         return l
 
-    def access(self, y, x):
-        if self.transpose:
-            x, y = y, x
-        self.accesses += 1
-        self.last_access_list.append((x, y))
-        tag = self.xy2cache(x, y)
+    def _update_cache(self, tag: int):
         try:
             i = self.cache.index(tag)
             del self.cache[i]
@@ -261,12 +256,19 @@ class Matrix:
         if len(self.cache) > self.L2_size:
             del self.cache[self.L2_size]
 
+    def access(self, row: int, col: int):
+        if self.transpose:
+            col, row = row, col
+        self.accesses += 1
+        self.last_access_list.append((col, row))
+        self._update_cache(self.xy2cache(col, row))
+
 
 class MatrixDrawer(ABC):
     ctx = None
 
-    def __init__(self, matrix):
-        self.matrix: Matrix = matrix
+    def __init__(self, matrix: Matrix):
+        self.matrix = matrix
         self.draw()
 
     @classmethod
@@ -295,6 +297,10 @@ class MatrixDrawer(ABC):
                     )
             self.draw_cache()
             self.draw_grid()
+
+    @abstractmethod
+    def show_stat(self, stat):
+        raise NotImplementedError
 
     @abstractmethod
     def draw_grid():
@@ -338,6 +344,7 @@ class MatrixDrawerRect(MatrixDrawer):
         ctx.move_to(0, -0.3)
         ctx.show_text(self.matrix.name + "  ")
 
+    @override
     def show_stat(self, stat):
         ctx = self.ctx
         ctx.set_font_size(Matrix.size / 20)
@@ -393,8 +400,8 @@ class MatrixDrawerLine(MatrixDrawer):
         ctx.move_to(-1.5, 1)
         ctx.show_text(self.matrix.name + "  ")
 
-    @staticmethod
-    def show_stat(stat):
+    @override
+    def show_stat(self, stat):
         pass
 
     @override
@@ -652,6 +659,34 @@ def perform_matrix_multiply_v2(bigctx, a: Matrix, b: Matrix, c: Matrix):
 def perform_matrix_multiply_v3(bigctx, a: Matrix, b: Matrix, c: Matrix):
     block1_size = 16
     block2_size = 4
+    simd_size = 4
+    drawer = FrameDrawer(
+        bigctx,
+        title=sys._getframe().f_code.co_name,
+        subtitle=", "
+        + f"blocking: (inner {block1_size}, outer {block2_size}), w/ SIMD",
+    )
+    frame_cnt = 0
+    for i in range(0, Matrix.size, block1_size):
+        for j in range(0, Matrix.size, block2_size):
+            for ii in range(i, i + block1_size, simd_size):
+                for jj in range(j, j + block2_size, simd_size):
+                    for k in range(0, Matrix.size):
+                        for simd_i in range(simd_size):
+                            a.access(ii + simd_i, k)
+                            b.access(k, jj + simd_i)
+                        for simd_i in range(simd_size):
+                            for simd_j in range(simd_size):
+                                c.access(ii + simd_i, jj + simd_j)
+
+                        drawer.draw_frame(a, b, c, frame_cnt)
+                        frame_cnt += 1
+
+
+def perform_matrix_multiply_v3_5(bigctx, a: Matrix, b: Matrix, c: Matrix):
+    block1_size = 16
+    block2_size = 4
+    simd_size = 4
     drawer = FrameDrawer(
         bigctx,
         title=sys._getframe().f_code.co_name,
@@ -664,7 +699,7 @@ def perform_matrix_multiply_v3(bigctx, a: Matrix, b: Matrix, c: Matrix):
             for ii in range(i, i + block1_size):
                 for jj in range(j, j + block2_size):
                     for k in range(0, Matrix.size, 4):
-                        for simd_i in range(4):
+                        for simd_i in range(simd_size):
                             c.access(ii, jj)
                             a.access(ii, k + simd_i)
                             b.access(k + simd_i, jj)
@@ -688,6 +723,7 @@ def main():
     # perform_matrix_multiply_v1(bigctx, a, b, c)
     # perform_matrix_multiply_v2(bigctx, a, b, c)
     perform_matrix_multiply_v3(bigctx, a, b, c)
+    # perform_matrix_multiply_v3_5(bigctx, a, b, c)
 
     print(Stats(a, b, c, hasL1=args.L1 > 0))
     if bigctx["ffmpeg"] is not None:
